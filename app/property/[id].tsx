@@ -1,0 +1,763 @@
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
+import { useThemeColor } from "@/hooks/use-theme-color";
+import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useState, useRef } from "react";
+import {
+  Dimensions,
+  Image,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+  Modal,
+  PanResponder,
+  Animated,
+  FlatList,
+  ActivityIndicator,
+} from "react-native";
+import { Video } from "expo-av";
+
+const { width, height } = Dimensions.get("window");
+
+export default function PropertyDetail() {
+  const { id, property: propertyJson } = useLocalSearchParams();
+  const router = useRouter();
+
+  // Parse the property data from params
+  let property = null;
+  try {
+    if (propertyJson) {
+      console.log("Raw propertyJson:", propertyJson);
+      property = JSON.parse(propertyJson as string);
+      console.log("Parsed property:", property);
+    }
+  } catch (e) {
+    console.error("Failed to parse property:", e);
+    console.log("propertyJson string:", propertyJson);
+  }
+
+  const [activeMediaIndex, setActiveMediaIndex] = useState(0);
+  const [fullScreenModalVisible, setFullScreenModalVisible] = useState(false);
+  const [fullScreenImageIndex, setFullScreenImageIndex] = useState(0);
+  const [scale] = useState(new Animated.Value(1));
+  const pinchScale = useRef(1);
+  const videoRefsMap = useRef({});
+  const [playingVideoIndex, setPlayingVideoIndex] = useState(-1);
+
+  // ✅ THEME COLORS
+  const backgroundColor = useThemeColor({}, "background");
+  const textColor = useThemeColor({}, "text");
+  const secondaryText = useThemeColor({}, "secondaryText");
+  const cardColor = useThemeColor({}, "card");
+  const tintColor = "#0a7ea4";
+
+  if (!property) {
+    return (
+      <ThemedView style={[styles.center, { backgroundColor }]}>
+        <ThemedText
+          type="subtitle"
+          style={{ textAlign: "center", marginBottom: 16 }}
+        >
+          Property not found
+        </ThemedText>
+        <TouchableOpacity
+          style={{
+            paddingHorizontal: 20,
+            paddingVertical: 10,
+            backgroundColor: "#0a7ea4",
+            borderRadius: 8,
+          }}
+          onPress={() => router.back()}
+        >
+          <ThemedText style={{ color: "#fff" }}>Go Back</ThemedText>
+        </TouchableOpacity>
+      </ThemedView>
+    );
+  }
+
+  // Safely handle media array - filter and combine
+  const mediaArray = Array.isArray(property.media) ? property.media : [];
+  const allImages = [
+    property.cover?.url,
+    ...mediaArray.filter((m) => m?.type === "image").map((m) => m?.url),
+  ].filter(Boolean);
+
+  const videos = mediaArray.filter((m) => m?.type === "video");
+
+  const handlePinch = (e) => {
+    const { scale } = e.nativeEvent;
+    Animated.spring(scale, {
+      toValue: pinchScale.current * scale,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const openFullScreenImage = (index: number): void => {
+    setFullScreenImageIndex(index);
+    setFullScreenModalVisible(true);
+  };
+
+  interface VideoRef {
+    getStatusAsync(): Promise<{ isPlaying: boolean }>;
+    pauseAsync(): Promise<void>;
+    playAsync(): Promise<void>;
+  }
+
+  const pauseAllOtherVideos = async (
+    exceptVideoIndex: number
+  ): Promise<void> => {
+    try {
+      for (const [index, videoRef] of Object.entries(videoRefsMap.current)) {
+        const videoIdx = parseInt(index, 10);
+        if (videoIdx !== exceptVideoIndex && videoRef) {
+          const status = await (videoRef as VideoRef).getStatusAsync();
+          if (status.isPlaying) {
+            await (videoRef as VideoRef).pauseAsync();
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error pausing other videos:", error);
+    }
+  };
+
+  const handleVideoPlayPause = async (videoIndex) => {
+    const videoRef = videoRefsMap.current[videoIndex];
+    if (videoRef) {
+      try {
+        const status = await videoRef.getStatusAsync();
+        if (status.isPlaying) {
+          await videoRef.pauseAsync();
+          setPlayingVideoIndex(-1);
+        } else {
+          await pauseAllOtherVideos(videoIndex);
+          await videoRef.playAsync();
+          setPlayingVideoIndex(videoIndex);
+        }
+      } catch (error) {
+        console.error("Error controlling video:", error);
+      }
+    }
+  };
+
+  const renderMediaItem = (index) => {
+    const item = index < allImages.length ? allImages[index] : null;
+    const video =
+      index >= allImages.length ? videos[index - allImages.length] : null;
+
+    if (video) {
+      const videoIndex = index;
+      const isPlaying = playingVideoIndex === videoIndex;
+
+      return (
+        <View key={index} style={styles.mediaContainer}>
+          <Video
+            ref={(ref) => {
+              if (ref) videoRefsMap.current[videoIndex] = ref;
+            }}
+            source={{ uri: video?.url }}
+            rate={1.0}
+            volume={1.0}
+            isMuted={false}
+            resizeMode="cover"
+            useNativeControls
+            style={styles.video}
+            onPlayStatusUpdate={(status) => {
+              if (status.isPlaying && playingVideoIndex !== videoIndex) {
+                pauseAllOtherVideos(videoIndex);
+                setPlayingVideoIndex(videoIndex);
+              } else if (
+                !status.isPlaying &&
+                playingVideoIndex === videoIndex
+              ) {
+                setPlayingVideoIndex(-1);
+              }
+            }}
+          />
+          <TouchableOpacity
+            style={styles.videoIndicator}
+            onPress={() => handleVideoPlayPause(videoIndex)}
+          >
+            <Ionicons
+              name={isPlaying ? "pause-circle" : "play-circle"}
+              size={32}
+              color="#fff"
+            />
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (item) {
+      return (
+        <TouchableOpacity
+          key={index}
+          onPress={() => openFullScreenImage(index)}
+          activeOpacity={0.9}
+        >
+          <Image
+            source={{ uri: item }}
+            style={styles.mainImage}
+            resizeMode="cover"
+          />
+        </TouchableOpacity>
+      );
+    }
+
+    return (
+      <View style={styles.mainImage}>
+        <Image
+          source={{
+            uri: "https://via.placeholder.com/300x200?text=No+Image",
+          }}
+          style={{ width: "100%", height: "100%" }}
+          resizeMode="cover"
+        />
+      </View>
+    );
+  };
+
+  return (
+    <ThemedView style={[styles.container, { backgroundColor }]}>
+      <StatusBar
+        translucent
+        backgroundColor="transparent"
+        barStyle="light-content"
+      />
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 120 }}
+      >
+        {/* 🖼️ Property Media Carousel */}
+        <View style={styles.mediaCarouselWrapper}>
+          {allImages.length + videos.length > 1 ? (
+            <ScrollView
+              horizontal
+              pagingEnabled
+              scrollEventThrottle={16}
+              showsHorizontalScrollIndicator={false}
+              onScroll={(e) => {
+                const contentOffsetX = e.nativeEvent.contentOffset.x;
+                const index = Math.round(contentOffsetX / width);
+                setActiveMediaIndex(index);
+              }}
+              style={styles.carouselScroll}
+            >
+              {allImages.map((image, index) => (
+                <View key={index} style={{ width, height: 400 }}>
+                  {renderMediaItem(index)}
+                </View>
+              ))}
+              {videos.map((video, index) => (
+                <View key={`video-${index}`} style={{ width, height: 400 }}>
+                  {renderMediaItem(allImages.length + index)}
+                </View>
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={{ width, height: 400 }}>{renderMediaItem(0)}</View>
+          )}
+
+          {/* Back Button */}
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={22} color="#fff" />
+          </TouchableOpacity>
+
+          {/* Media Counter */}
+          {allImages.length + videos.length > 1 && (
+            <View style={styles.mediaCounter}>
+              <ThemedText style={{ color: "#fff", fontWeight: "600" }}>
+                {activeMediaIndex + 1}/{allImages.length + videos.length}
+              </ThemedText>
+            </View>
+          )}
+        </View>
+
+        {/* 📄 Property Info Section */}
+        <ThemedView style={[styles.content, { backgroundColor }]}>
+          {/* Category Tag */}
+          <View
+            style={[styles.categoryTag, { backgroundColor: tintColor + "20" }]}
+          >
+            <ThemedText style={[styles.categoryText, { color: tintColor }]}>
+              {property.type?.charAt(0).toUpperCase() +
+                property.type?.slice(1) || "Property"}
+            </ThemedText>
+          </View>
+
+          {/* Title */}
+          <ThemedText type="title" style={[styles.title, { color: textColor }]}>
+            {property.title}
+          </ThemedText>
+
+          {/* Location */}
+          <View style={styles.locationRow}>
+            <Ionicons name="location-outline" size={16} color={secondaryText} />
+            <ThemedText style={[styles.location, { color: secondaryText }]}>
+              {typeof property.location === "object"
+                ? `${property.location?.street || ""}, ${
+                    property.location?.district || ""
+                  }, ${property.location?.region || ""}`
+                : property.location}
+            </ThemedText>
+          </View>
+
+          {/* Property Details Grid */}
+          <View style={styles.detailsGrid}>
+            {/* Bedrooms */}
+            <View style={[styles.detailItem, { backgroundColor: cardColor }]}>
+              <Ionicons name="bed-outline" size={20} color={tintColor} />
+              <ThemedText
+                style={[styles.detailLabel, { color: secondaryText }]}
+              >
+                Bedrooms
+              </ThemedText>
+              <ThemedText style={[styles.detailValue, { color: textColor }]}>
+                {property.bedrooms}
+              </ThemedText>
+            </View>
+
+            {/* Area */}
+            <View style={[styles.detailItem, { backgroundColor: cardColor }]}>
+              <Ionicons name="expand-outline" size={20} color={tintColor} />
+              <ThemedText
+                style={[styles.detailLabel, { color: secondaryText }]}
+              >
+                Area
+              </ThemedText>
+              <ThemedText style={[styles.detailValue, { color: textColor }]}>
+                {property.area} m²
+              </ThemedText>
+            </View>
+
+            {/* Property Type */}
+            <View style={[styles.detailItem, { backgroundColor: cardColor }]}>
+              <Ionicons name="home-outline" size={20} color={tintColor} />
+              <ThemedText
+                style={[styles.detailLabel, { color: secondaryText }]}
+              >
+                Type
+              </ThemedText>
+              <ThemedText style={[styles.detailValue, { color: textColor }]}>
+                {property.type}
+              </ThemedText>
+            </View>
+
+            {/* Purpose */}
+            <View style={[styles.detailItem, { backgroundColor: cardColor }]}>
+              <Ionicons name="pricetag-outline" size={20} color={tintColor} />
+              <ThemedText
+                style={[styles.detailLabel, { color: secondaryText }]}
+              >
+                Purpose
+              </ThemedText>
+              <ThemedText style={[styles.detailValue, { color: textColor }]}>
+                {property.purpose}
+              </ThemedText>
+            </View>
+          </View>
+
+          {/* Description */}
+          <View style={{ marginTop: 24 }}>
+            <ThemedText
+              type="subtitle"
+              style={[styles.sectionTitle, { color: textColor }]}
+            >
+              Description
+            </ThemedText>
+            <ThemedText style={[styles.description, { color: secondaryText }]}>
+              {property.description}
+            </ThemedText>
+          </View>
+
+          {/* Owner/Agent Section */}
+          <View style={{ marginTop: 24 }}>
+            <ThemedText
+              type="subtitle"
+              style={[styles.sectionTitle, { color: textColor }]}
+            >
+              Owner Information
+            </ThemedText>
+
+            <View style={[styles.ownerCard, { backgroundColor: cardColor }]}>
+              <View>
+                <ThemedText style={[styles.ownerName, { color: textColor }]}>
+                  {property.ownerUsername ||
+                    property.ownerId?.email?.split("@")[0] ||
+                    "Property Owner"}
+                </ThemedText>
+                <ThemedText
+                  style={[styles.ownerEmail, { color: secondaryText }]}
+                >
+                  {property.ownerId?.email || "contact@example.com"}
+                </ThemedText>
+              </View>
+            </View>
+
+            <View
+              style={[
+                styles.divider,
+                { borderBottomColor: secondaryText + "30" },
+              ]}
+            />
+          </View>
+
+          {/* Status */}
+          <View style={{ marginTop: 16 }}>
+            <ThemedText style={[styles.statusLabel, { color: secondaryText }]}>
+              Status
+            </ThemedText>
+            <View
+              style={[
+                styles.statusBadge,
+                {
+                  backgroundColor:
+                    property.status === "available" ? "#10b98120" : "#ef444420",
+                },
+              ]}
+            >
+              <ThemedText
+                style={[
+                  styles.statusText,
+                  {
+                    color:
+                      property.status === "available" ? "#059669" : "#dc2626",
+                  },
+                ]}
+              >
+                {property.status
+                  ? property.status.charAt(0).toUpperCase() +
+                    property.status.slice(1)
+                  : "Unknown"}
+              </ThemedText>
+            </View>
+          </View>
+        </ThemedView>
+      </ScrollView>
+
+      {/* 💰 Bottom Bar */}
+      <ThemedView style={[styles.bottomBar, { backgroundColor: cardColor }]}>
+        <View style={{ flex: 1 }}>
+          <ThemedText style={[styles.priceLabel, { color: secondaryText }]}>
+            Price
+          </ThemedText>
+          <ThemedText style={[styles.totalPrice, { color: tintColor }]}>
+            TZS {property.price?.toLocaleString() || "0"}
+          </ThemedText>
+        </View>
+
+        <TouchableOpacity
+          style={[styles.bookButton, { backgroundColor: tintColor }]}
+        >
+          <ThemedText style={styles.bookButtonText}>Book Now</ThemedText>
+        </TouchableOpacity>
+      </ThemedView>
+
+      {/* Full Screen Image Modal */}
+      <Modal
+        visible={fullScreenModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setFullScreenModalVisible(false)}
+        statusBarTranslucent={true}
+      >
+        <StatusBar
+          translucent
+          backgroundColor="transparent"
+          barStyle="light-content"
+        />
+        <View style={styles.fullScreenContainer}>
+          <TouchableOpacity
+            style={styles.fullScreenClose}
+            onPress={() => setFullScreenModalVisible(false)}
+          >
+            <Ionicons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+
+          <ScrollView
+            horizontal
+            pagingEnabled
+            scrollEventThrottle={16}
+            onScroll={(e) => {
+              const contentOffsetX = e.nativeEvent.contentOffset.x;
+              const index = Math.round(contentOffsetX / width);
+              setFullScreenImageIndex(index);
+            }}
+            style={styles.fullScreenScroll}
+          >
+            {allImages.map((image, index) => (
+              <View key={index} style={{ width, height }}>
+                <Image
+                  source={{ uri: image }}
+                  style={styles.fullScreenImage}
+                  resizeMode="contain"
+                />
+              </View>
+            ))}
+            {videos.map((video, index) => {
+              const videoIndex = allImages.length + index;
+              const isPlaying = playingVideoIndex === videoIndex;
+
+              return (
+                <View key={`video-${index}`} style={{ width, height }}>
+                  <Video
+                    ref={(ref) => {
+                      if (ref) videoRefsMap.current[videoIndex] = ref;
+                    }}
+                    source={{ uri: video?.url }}
+                    rate={1.0}
+                    volume={1.0}
+                    isMuted={false}
+                    resizeMode="cover"
+                    useNativeControls
+                    style={styles.fullScreenImage}
+                    onPlayStatusUpdate={(status) => {
+                      if (
+                        status.isPlaying &&
+                        playingVideoIndex !== videoIndex
+                      ) {
+                        pauseAllOtherVideos(videoIndex);
+                        setPlayingVideoIndex(videoIndex);
+                      } else if (
+                        !status.isPlaying &&
+                        playingVideoIndex === videoIndex
+                      ) {
+                        setPlayingVideoIndex(-1);
+                      }
+                    }}
+                  />
+                  <TouchableOpacity
+                    style={styles.fullScreenVideoIndicator}
+                    onPress={() => handleVideoPlayPause(videoIndex)}
+                  >
+                    <Ionicons
+                      name={isPlaying ? "pause-circle" : "play-circle"}
+                      size={48}
+                      color="#fff"
+                    />
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </ScrollView>
+
+          {/* Image Counter in Full Screen */}
+          <View style={styles.fullScreenCounter}>
+            <ThemedText style={{ color: "#fff", fontWeight: "600" }}>
+              {fullScreenImageIndex + 1}/{allImages.length}
+            </ThemedText>
+          </View>
+        </View>
+      </Modal>
+    </ThemedView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  mediaCarouselWrapper: {
+    position: "relative",
+    width: "100%",
+    height: 400,
+  },
+  carouselScroll: {
+    flex: 1,
+  },
+  imageWrapper: {
+    position: "relative",
+    width: "100%",
+    height: height * 0.4,
+  },
+  mainImage: {
+    width: "100%",
+    height: "100%",
+  },
+  mediaContainer: {
+    width: "100%",
+    height: "100%",
+    position: "relative",
+  },
+  video: {
+    width: "100%",
+    height: "100%",
+  },
+  videoIndicator: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    marginTop: -16,
+    marginLeft: -16,
+  },
+  backButton: {
+    position: "absolute",
+    top: 50,
+    left: 20,
+    zIndex: 10,
+    backgroundColor: "#00000080",
+    padding: 8,
+    borderRadius: 20,
+  },
+  mediaCounter: {
+    position: "absolute",
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: "#00000080",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  selectorContainer: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 0,
+    maxWidth: "100%",
+  },
+  selector: {
+    width: 50,
+    height: 40,
+    borderRadius: 8,
+    overflow: "hidden",
+    opacity: 0.6,
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  selectorActive: {
+    opacity: 1,
+    borderColor: "#0a7ea4",
+  },
+  selectorImage: {
+    width: "100%",
+    height: "100%",
+  },
+  selectorVideoIcon: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    marginTop: -7,
+    marginLeft: -7,
+  },
+  content: {
+    padding: 16,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    marginTop: -10,
+  },
+  categoryTag: {
+    alignSelf: "flex-start",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    marginBottom: 8,
+  },
+  categoryText: { fontSize: 13, fontWeight: "600" },
+  title: { fontSize: 22, fontWeight: "700", marginBottom: 6 },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    gap: 4,
+  },
+  location: { marginLeft: 0, fontSize: 14, flex: 1 },
+  detailsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginBottom: 20,
+  },
+  detailItem: {
+    flex: 1,
+    minWidth: "45%",
+    padding: 12,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  detailLabel: { fontSize: 12, marginTop: 4 },
+  detailValue: { fontSize: 16, fontWeight: "700", marginTop: 2 },
+  sectionTitle: { fontSize: 18, fontWeight: "600", marginBottom: 12 },
+  description: { lineHeight: 20, fontSize: 14 },
+  ownerCard: {
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  ownerName: { fontSize: 16, fontWeight: "600" },
+  ownerEmail: { fontSize: 13, marginTop: 4 },
+  divider: { borderBottomWidth: 1, marginTop: 12 },
+  statusLabel: { fontSize: 13, marginBottom: 6 },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    alignSelf: "flex-start",
+  },
+  statusText: { fontSize: 13, fontWeight: "600" },
+  bottomBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#ccc",
+  },
+  priceLabel: { fontSize: 13 },
+  totalPrice: { fontSize: 18, fontWeight: "700" },
+  bookButton: {
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 30,
+  },
+  bookButtonText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  fullScreenContainer: {
+    flex: 1,
+    backgroundColor: "#000",
+    paddingTop: 0,
+  },
+  fullScreenScroll: {
+    flex: 1,
+  },
+  fullScreenImage: {
+    width: "100%",
+    height: "100%",
+  },
+  fullScreenClose: {
+    position: "absolute",
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    padding: 8,
+    backgroundColor: "#00000080",
+    borderRadius: 20,
+  },
+  fullScreenCounter: {
+    position: "absolute",
+    bottom: 50,
+    alignSelf: "center",
+    backgroundColor: "#00000080",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  fullScreenVideoIndicator: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    marginTop: -24,
+    marginLeft: -24,
+    zIndex: 10,
+  },
+});

@@ -1,0 +1,61 @@
+---
+alwaysApply: true
+---
+
+project:
+name: accomtz
+description: >
+React Native Expo app for Accomtz. Students browse and book properties.
+Agents upload and manage their listings. Includes login, booking,
+and agent management flows.
+
+tech_stack:
+
+- React Native
+- Expo Router
+- TypeScript
+- Axios for API requests
+- Zustand or Redux Toolkit for state management
+- Expo Secure Store for tokens
+  -jwt token for authentication and authorization
+- Cloudinary for displaying media
+
+conventions:
+
+- Use TypeScript strict mode.
+- Use functional components with hooks (no class components).
+- Follow folder structure:
+  app/ # screens (expo-router)
+  components/ # UI components
+  services/ # API calls
+  constants/ # theme, colors
+  store/ # global state (Zustand or Redux)
+  types/ # shared TypeScript interfaces
+- Use camelCase for variables, PascalCase for components.
+- Separate UI from logic (custom hooks for business logic).
+- Import from "@/..." aliases for clean paths.
+- In any form input validate the user inputs always.
+
+ai_rules:
+
+- Always type props and states explicitly.
+- For navigation, use `expo-router` conventions.
+- Use React Native’s built-in components and @expo/vector-icons.
+- When calling backend APIs, use Axios with a pre-configured baseURL.
+- Use async storage through `expo-secure-store` for sensitive tokens.
+- Follow component-driven design — smaller, reusable pieces.
+- Keep UI consistent with app theme.
+  -always maintain theming dark and light modes
+- Use safe area and responsive styles (Dimensions API).
+
+libraries:
+
+- expo
+- react-native
+- expo-router
+- axios
+- expo-secure-store
+- react-native-gesture-handler
+- react-native-reanimated
+- zustand (or redux-toolkit)
+- @expo/vector-icons

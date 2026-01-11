@@ -1,1 +1,18 @@
-{ "recommendations": ["expo.vscode-expo-tools"] }
+{
+  "recommendations": [
+    "ms-vscode.vscode-typescript-next",
+    "ms-vscode.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "ms-vscode.vscode-json",
+    "formulahendry.auto-rename-tag",
+    "christian-kohler.path-intellisense",
+    "dsznajder.es7-react-js-snippets",
+    "ms-vscode.vscode-react-native",
+    "expo.vscode-expo-tools",
+    "bradlc.vscode-tailwindcss",
+    "ms-vscode.vscode-typescript-next",
+    "steoates.autoimport-es6-ts",
+    "usernamehw.errorlens",
+    "eamodio.gitlens"
+  ]
+}

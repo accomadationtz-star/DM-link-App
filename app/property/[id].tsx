@@ -3,7 +3,7 @@ import { ThemedView } from "@/components/themed-view";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Dimensions,
   Image,
@@ -18,26 +18,51 @@ import {
   FlatList,
   ActivityIndicator,
 } from "react-native";
-import { Video } from "expo-av";
+import { Video, ResizeMode } from "expo-av";
+import { getPropertyById } from "@/services/api/property";
 
 const { width, height } = Dimensions.get("window");
 
 export default function PropertyDetail() {
   const { id, property: propertyJson } = useLocalSearchParams();
   const router = useRouter();
+  const [property, setProperty] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
 
   // Parse the property data from params
-  let property = null;
-  try {
+  useEffect(() => {
     if (propertyJson) {
-      console.log("Raw propertyJson:", propertyJson);
-      property = JSON.parse(propertyJson as string);
-      console.log("Parsed property:", property);
+      try {
+        console.log("Raw propertyJson:", propertyJson);
+        const parsedProperty = JSON.parse(propertyJson as string);
+        console.log("Parsed property:", parsedProperty);
+        setProperty(parsedProperty);
+      } catch (e) {
+        console.error("Failed to parse property from params:", e);
+        // Try to fetch from API if parsing fails
+        if (id) {
+          fetchPropertyDetails(id as string);
+        }
+      }
+    } else if (id) {
+      // If no property data in params, fetch from API
+      fetchPropertyDetails(id as string);
     }
-  } catch (e) {
-    console.error("Failed to parse property:", e);
-    console.log("propertyJson string:", propertyJson);
-  }
+  }, [id, propertyJson]);
+
+  const fetchPropertyDetails = async (propertyId: string) => {
+    setLoading(true);
+    try {
+      const data = await getPropertyById(propertyId);
+      console.log("Fetched property from API:", data);
+      setProperty(data);
+    } catch (error) {
+      console.error("Failed to fetch property details:", error);
+      // Continue with empty state - property wasn't found
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
   const [fullScreenModalVisible, setFullScreenModalVisible] = useState(false);
@@ -55,6 +80,17 @@ export default function PropertyDetail() {
   const tintColor = "#0a7ea4";
 
   if (!property) {
+    if (loading) {
+      return (
+        <ThemedView style={[styles.center, { backgroundColor }]}>
+          <ActivityIndicator size="large" color="#0a7ea4" />
+          <ThemedText style={{ marginTop: 16, textAlign: "center" }}>
+            Loading property details...
+          </ThemedText>
+        </ThemedView>
+      );
+    }
+
     return (
       <ThemedView style={[styles.center, { backgroundColor }]}>
         <ThemedText
@@ -159,7 +195,6 @@ export default function PropertyDetail() {
 
       return (
         <View key={index} style={styles.mediaContainer}>
-          {/* @ts-ignore */}
           <Video
             ref={(ref: any) => {
               if (ref) (videoRefsMap.current as any)[videoIndex] = ref;
@@ -169,6 +204,7 @@ export default function PropertyDetail() {
             volume={1.0}
             isMuted={false}
             useNativeControls
+            resizeMode={ResizeMode.COVER}
             style={styles.video}
             onPlaybackStatusUpdate={(status: any) => {
               if (status.isPlaying && playingVideoIndex !== videoIndex) {
@@ -512,7 +548,6 @@ export default function PropertyDetail() {
 
               return (
                 <View key={`video-${index}`} style={{ width, height }}>
-                  {/* @ts-ignore */}
                   <Video
                     ref={(ref: any) => {
                       if (ref) (videoRefsMap.current as any)[videoIndex] = ref;
@@ -522,6 +557,7 @@ export default function PropertyDetail() {
                     volume={1.0}
                     isMuted={false}
                     useNativeControls
+                    resizeMode={ResizeMode.COVER}
                     style={styles.fullScreenImage}
                     onPlaybackStatusUpdate={(status: any) => {
                       if (
@@ -588,10 +624,14 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
     position: "relative",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#000",
   },
   video: {
     width: "100%",
     height: "100%",
+    flex: 1,
   },
   videoIndicator: {
     position: "absolute",
@@ -738,6 +778,8 @@ const styles = StyleSheet.create({
   fullScreenImage: {
     width: "100%",
     height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
   },
   fullScreenClose: {
     position: "absolute",

@@ -88,7 +88,7 @@ export default function UploadPropertyScreen() {
     mediaType: "image" | "video"
   ): Promise<{ valid: boolean; error?: string }> => {
     try {
-      const fileInfo = await FileSystem.getInfoAsync(uri, { size: true });
+      const fileInfo = await FileSystem.getInfoAsync(uri);
 
       if (!fileInfo.exists) {
         return { valid: false, error: "File does not exist" };
@@ -768,12 +768,16 @@ export default function UploadPropertyScreen() {
           </View>
 
           <View style={styles.inputGroup}>
-            <ThemedText style={styles.label}>Price *</ThemedText>
+            <ThemedText style={styles.label}>
+              {formData.purpose === "rent" ? "Rent Price Per Month" : "Price"} *
+            </ThemedText>
             <TextInput
               style={styles.input}
               value={formData.price}
               onChangeText={(value) => handleInputChange("price", value)}
-              placeholder="Enter price"
+              placeholder={
+                formData.purpose === "rent" ? "Enter rent price" : "Enter price"
+              }
               placeholderTextColor={
                 Colors[colorScheme ?? "light"].secondaryText
               }

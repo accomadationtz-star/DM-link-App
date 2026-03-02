@@ -17,17 +17,22 @@ import {
   Animated,
   FlatList,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Video, ResizeMode } from "expo-av";
 import { getPropertyById } from "@/services/api/property";
+import { useAuthStore } from "@/store/auth";
+import { createInquiry } from "@/services/api/inquiries";
 
 const { width, height } = Dimensions.get("window");
 
 export default function PropertyDetail() {
   const { id, property: propertyJson } = useLocalSearchParams();
   const router = useRouter();
+  const user = useAuthStore((state) => state.user);
   const [property, setProperty] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Parse the property data from params
   useEffect(() => {
@@ -261,6 +266,170 @@ export default function PropertyDetail() {
     );
   };
 
+  const handleInquiryRequest = async () => {
+    // Check if user is logged in
+    if (!user) {
+      Alert.alert(
+        "Login Required",
+        `To ${
+          property.purpose === "rent" ? "request to rent" : "request to buy"
+        } this property, you need to have an account. Please log in or create an account first.`,
+        [
+          {
+            text: "Cancel",
+            onPress: () => console.log("Dismissed"),
+            style: "cancel",
+          },
+          {
+            text: "Go to Login",
+            onPress: () => router.push("/(auth)/login"),
+          },
+        ]
+      );
+      return;
+    }
+
+    // Proceed with inquiry
+    setIsSubmitting(true);
+    try {
+      const inquiryType = property.purpose === "rent" ? "rent" : "buy";
+      const response = await createInquiry({
+        propertyId: property._id || id,
+        inquiryType,
+      });
+
+      if (response.success) {
+        Alert.alert(
+          "Success",
+          `Your ${
+            inquiryType === "rent" ? "rent" : "purchase"
+          } inquiry has been sent successfully! The property owner will contact you soon.`,
+          [
+            {
+              text: "OK",
+              onPress: () => router.back(),
+            },
+          ]
+        );
+      } else {
+        // Handle server response with success: false
+        const errorMsg =
+          response.message || "Failed to send inquiry. Please try again.";
+        Alert.alert("Unable to Send Inquiry", errorMsg, [
+          {
+            text: "OK",
+            style: "cancel",
+          },
+        ]);
+      }
+    } catch (error: any) {
+      let errorMessage = "Failed to send inquiry. Please try again.";
+      let errorTitle = "Error";
+
+      // Handle network/connection errors
+      if (!error.response) {
+        if (error.code === "ECONNABORTED") {
+          errorTitle = "Connection Timeout";
+          errorMessage =
+            "The request took too long. Please check your internet connection and try again.";
+        } else if (
+          error.message === "Network Error" ||
+          error.code === "ENOTFOUND" ||
+          error.code === "ECONNREFUSED"
+        ) {
+          errorTitle = "Connection Error";
+          errorMessage =
+            "Unable to connect to the server. Please check your internet connection and try again.";
+        } else if (error.message?.includes("timeout")) {
+          errorTitle = "Connection Timeout";
+          errorMessage =
+            "The request took too long. Please check your internet connection and try again.";
+        } else {
+          errorTitle = "Network Error";
+          errorMessage =
+            error.message || "An error occurred. Please check your connection.";
+        }
+      } else {
+        // Handle HTTP error responses with data from server
+        const errorData = error.response?.data;
+
+        if (typeof errorData === "object" && errorData !== null) {
+          // Check for message field (most common pattern)
+          if (errorData.message) {
+            errorMessage = errorData.message;
+          }
+          // Check for error field (alternative pattern)
+          else if (errorData.error) {
+            errorMessage = errorData.error;
+          }
+          // Check for errors array (validation errors)
+          else if (
+            Array.isArray(errorData.errors) &&
+            errorData.errors.length > 0
+          ) {
+            errorMessage = errorData.errors
+              .map(
+                (err: any) =>
+                  err.message ||
+                  err.msg ||
+                  (typeof err === "string" ? err : "Validation error")
+              )
+              .join("\n");
+          }
+          // Check for details field (additional info)
+          else if (errorData.details) {
+            errorMessage = errorData.details;
+          }
+          // Fallback to status text
+          else {
+            errorMessage =
+              error.response?.statusText ||
+              "Failed to send inquiry. Please try again.";
+          }
+        } else if (typeof errorData === "string") {
+          errorMessage = errorData;
+        }
+
+        // Set error title based on status code
+        const statusCode = error.response?.status;
+        if (statusCode === 400) {
+          errorTitle = "Invalid Request";
+        } else if (statusCode === 401) {
+          errorTitle = "Not Authenticated";
+          errorMessage = "Your session has expired. Please log in again.";
+        } else if (statusCode === 403) {
+          errorTitle = "Access Denied";
+        } else if (statusCode === 404) {
+          errorTitle = "Not Found";
+          errorMessage = "The property was not found.";
+        } else if (statusCode === 409) {
+          errorTitle = "Conflict";
+        } else if (statusCode >= 500) {
+          errorTitle = "Server Error";
+          errorMessage =
+            "The server encountered an error. Please try again later.";
+        }
+      }
+
+      console.error("❌ Inquiry request error:", {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message,
+        code: error.code,
+      });
+
+      Alert.alert(errorTitle, errorMessage, [
+        {
+          text: "OK",
+          style: "cancel",
+        },
+      ]);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <ThemedView style={[styles.container, { backgroundColor }]}>
       <StatusBar
@@ -489,15 +658,35 @@ export default function PropertyDetail() {
           <ThemedText style={[styles.priceLabel, { color: secondaryText }]}>
             Price
           </ThemedText>
-          <ThemedText style={[styles.totalPrice, { color: tintColor }]}>
-            TZS {property.price?.toLocaleString() || "0"}
-          </ThemedText>
+          <View style={{ flexDirection: "row", alignItems: "baseline" }}>
+            <ThemedText style={[styles.totalPrice, { color: tintColor }]}>
+              TZS {property.price?.toLocaleString() || "0"}
+            </ThemedText>
+            {property.purpose === "rent" && (
+              <ThemedText
+                style={[{ color: secondaryText, marginLeft: 8, fontSize: 14 }]}
+              >
+                per month
+              </ThemedText>
+            )}
+          </View>
         </View>
 
         <TouchableOpacity
           style={[styles.bookButton, { backgroundColor: tintColor }]}
+          onPress={handleInquiryRequest}
+          disabled={isSubmitting}
+          activeOpacity={0.8}
         >
-          <ThemedText style={styles.bookButtonText}>Book Now</ThemedText>
+          {isSubmitting ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <ThemedText style={styles.bookButtonText}>
+              {property.purpose === "rent"
+                ? "Request to Rent"
+                : "Request to Buy"}
+            </ThemedText>
+          )}
         </TouchableOpacity>
       </ThemedView>
 

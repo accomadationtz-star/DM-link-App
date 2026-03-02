@@ -37,7 +37,7 @@ export interface UploadPropertyResponse {
 }
 
 export async function uploadProperty(
-  payload: UploadPropertyPayload
+  payload: UploadPropertyPayload,
 ): Promise<UploadPropertyResponse> {
   try {
     console.log("\n╔═══════════════════════════════════════════════════════╗");
@@ -88,7 +88,7 @@ export async function uploadProperty(
         formData.append("images", imageFile);
       }
       console.log(
-        `  ✅ ${payload.images.length} image(s) appended successfully`
+        `  ✅ ${payload.images.length} image(s) appended successfully`,
       );
     } else {
       console.log("\n🖼️  No images to upload");
@@ -114,7 +114,7 @@ export async function uploadProperty(
         formData.append("videos", videoFile);
       }
       console.log(
-        `  ✅ ${payload.videos.length} video(s) appended successfully`
+        `  ✅ ${payload.videos.length} video(s) appended successfully`,
       );
     } else {
       console.log("\n🎥 No videos to upload");
@@ -135,12 +135,12 @@ export async function uploadProperty(
         onUploadProgress: (progressEvent) => {
           if (progressEvent.total) {
             const percentCompleted = Math.round(
-              (progressEvent.loaded * 100) / progressEvent.total
+              (progressEvent.loaded * 100) / progressEvent.total,
             );
             console.log(`📊 Upload progress: ${percentCompleted}%`);
           }
         },
-      }
+      },
     );
 
     console.log("\n╔═══════════════════════════════════════════════════════╗");
@@ -151,7 +151,7 @@ export async function uploadProperty(
     return res.data;
   } catch (error: any) {
     console.error(
-      "\n╔═══════════════════════════════════════════════════════╗"
+      "\n╔═══════════════════════════════════════════════════════╗",
     );
     console.error("║         PROPERTY UPLOAD - FAILED ❌                   ║");
     console.error("╚═══════════════════════════════════════════════════════╝");
@@ -163,12 +163,12 @@ export async function uploadProperty(
       console.error("  Message:", error.response.data?.message);
       console.error(
         "  Full response:",
-        JSON.stringify(error.response.data, null, 2)
+        JSON.stringify(error.response.data, null, 2),
       );
 
       throw new Error(
         error.response.data?.message ||
-          `Upload failed with status ${error.response.status}`
+          `Upload failed with status ${error.response.status}`,
       );
     } else if (error.request) {
       // Request made but no response
@@ -176,12 +176,12 @@ export async function uploadProperty(
       console.error("  No response received from server");
       console.error(
         "  Check if backend is running at:",
-        apiClient.defaults.baseURL
+        apiClient.defaults.baseURL,
       );
       console.error("  Request timeout:", error.config?.timeout, "ms");
 
       throw new Error(
-        "No response from server. Please check your connection and try again."
+        "No response from server. Please check your connection and try again.",
       );
     } else {
       // Request setup error
@@ -199,17 +199,49 @@ export interface PropertyListResponse {
   total: number;
 }
 
-export async function getProperties(
+// Fetch all properties (admin/agent view)
+export async function getAllProperties(
   page = 1,
-  limit = 10
+  limit = 20,
 ): Promise<PropertyListResponse> {
   const res = await apiClient.get<PropertyListResponse>(
-    `/api/properties?page=${page}&limit=${limit}`
+    `/api/properties/all?page=${page}&limit=${limit}`,
   );
+  return res.data;
+}
+
+export async function getProperties(
+  page = 1,
+  limit = 10,
+): Promise<PropertyListResponse> {
+  const res = await apiClient.get<PropertyListResponse>(`/api/properties`);
   return res.data;
 }
 
 export async function getPropertyById(id: string) {
   const res = await apiClient.get(`/api/properties/${id}`);
+  return res.data;
+}
+
+export async function getPropertyDetailsForAgent(id: string) {
+  try {
+    const res = await apiClient.get(`/api/properties/${id}`);
+    // Handle both { success, data } and direct data responses
+    const data = res.data?.data || res.data;
+    return {
+      success: true,
+      data: data,
+    };
+  } catch (error) {
+    console.error("Error fetching property details:", error);
+    throw error;
+  }
+}
+
+export async function updatePropertyStatus(id: string, status: string) {
+  const res = await apiClient.patch(`/api/properties/${id}/status`, {
+    status,
+  });
+
   return res.data;
 }

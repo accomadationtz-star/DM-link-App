@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "669990341173",
+    "project_id": "dm-link",
+    "storage_bucket": "dm-link.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:669990341173:android:4f421966856cdcb312bf7c",
+        "android_client_info": {
+          "package_name": "com.dmlink.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "669990341173-aik98id1u6f5724pdq019f5pu7hviejk.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAhoi-20uGL0Ey66SFeElR_xqbqv9buMFo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "669990341173-aik98id1u6f5724pdq019f5pu7hviejk.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "669990341173-rql0l6auq4hvufbtfb9k25sb7sp5e5u9.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.dmlink.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

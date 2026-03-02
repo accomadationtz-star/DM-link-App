@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -15,6 +15,8 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Colors } from "@/constants/theme";
 import { loginUser } from "@/services/api/auth";
 import { useAuthStore } from "@/store/auth";
+import { useGoogleAuth } from "./googleAuth";
+import apiClient from "@/services/api/client";
 
 type FormState = {
   username: string;
@@ -31,6 +33,46 @@ export default function LoginScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const colorScheme = useColorScheme();
   const setSession = useAuthStore((s) => s.setSession);
+  const [request, response, promptAsync] = useGoogleAuth();
+
+  useEffect(() => {
+    if (response?.type === "success") {
+      const { accessToken } = response.authentication;
+      googleLogin(accessToken);
+    }
+  }, [response]);
+
+  const googleLogin = async (accessToken: string) => {
+    try {
+      setIsSubmitting(true);
+      const res = await apiClient.post("/auth/google", { accessToken });
+
+      const { user, tokens } = res.data;
+
+      await setSession({
+        user,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      });
+
+      // Check if user needs to complete registration
+      if (user.registrationStep === "PHONE_REQUIRED") {
+        // Navigate to phone verification or profile completion
+        alert("Please complete your profile");
+        router.replace("/(tabs)/profile");
+      } else {
+        router.replace("/(tabs)/profile");
+      }
+    } catch (e: any) {
+      const backendMsg =
+        e?.response?.data?.message ||
+        e?.response?.data?.error ||
+        "Google login failed. Please try again.";
+      alert(backendMsg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const canSubmit = useMemo(() => {
     return (
@@ -192,6 +234,26 @@ export default function LoginScreen() {
             </ThemedText>
           </TouchableOpacity>
 
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <ThemedText style={styles.dividerText}>or</ThemedText>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <TouchableOpacity
+            disabled={!request || isSubmitting}
+            style={[
+              styles.googleButton,
+              colorScheme === "dark" && styles.googleButtonDark,
+              (!request || isSubmitting) && styles.buttonDisabled,
+            ]}
+            onPress={() => promptAsync()}
+          >
+            <ThemedText style={styles.googleButtonText}>
+              Continue with Google
+            </ThemedText>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.linkBtn}
             onPress={() => router.replace("/(auth)/register")}
@@ -232,5 +294,36 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: "#fff", fontWeight: "600" },
+  divider: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#99999933",
+  },
+  dividerText: {
+    marginHorizontal: 12,
+    opacity: 0.6,
+    fontSize: 14,
+  },
+  googleButton: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#99999933",
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+  },
+  googleButtonDark: {
+    backgroundColor: "#1F2937",
+    borderColor: "#374151",
+  },
+  googleButtonText: {
+    fontWeight: "600",
+  },
   linkBtn: { alignItems: "center", paddingVertical: 8 },
 });

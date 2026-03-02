@@ -1,323 +1,499 @@
-import { AgentProperty, getPropertiesByStatus, getTotalStats, mockAgentProperties } from '@/components/AgentUi/mockAgentData';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
+import { Colors } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { router } from "expo-router";
+import { useState, useEffect } from "react";
+import { getAgentDashboard } from "@/services/api/agent";
+import { AgentProperty } from "@/components/AgentUi/mockAgentData";
+import { Inquiry } from "@/components/AgentUi/mockInquiriesData";
 import {
-    Dimensions,
-    FlatList,
-    Image,
-    StyleSheet,
-    TouchableOpacity,
-    View
-} from 'react-native';
+  Dimensions,
+  FlatList,
+  Image,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
-const { width } = Dimensions.get('window');
+const { width } = Dimensions.get("window");
 
 export default function AgentScreen() {
   const colorScheme = useColorScheme();
-  const [activeTab, setActiveTab] = useState<'all' | 'available' | 'booked' | 'sold'>('all');
-  
-  const stats = getTotalStats();
-  
-  const getFilteredProperties = () => {
-    switch (activeTab) {
-      case 'available':
-        return getPropertiesByStatus('available');
-      case 'booked':
-        return getPropertiesByStatus('booked');
-      case 'sold':
-        return getPropertiesByStatus('sold');
-      default:
-        return mockAgentProperties;
+  const [propertyStats, setPropertyStats] = useState({
+    total: 0,
+    available: 0,
+    booked: 0,
+    sold: 0,
+  });
+
+  const [inquiryStats, setInquiryStats] = useState({
+    total: 0,
+    pending: 0,
+    contacted: 0,
+    booked: 0,
+  });
+
+  const [recentPendingInquiries, setRecentPendingInquiries] = useState<
+    Inquiry[]
+  >([]);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    async function loadDashboard() {
+      try {
+        const res = await getAgentDashboard();
+
+        // Map stats using backend keys
+        setPropertyStats({
+          total: res.data.properties?.total ?? 0,
+          available: res.data.properties?.available ?? 0,
+          booked: res.data.properties?.booked ?? 0,
+          sold: res.data.properties?.sold ?? 0,
+        });
+
+        setInquiryStats({
+          total: res.data.inquiries?.total ?? 0,
+          pending: res.data.inquiries?.pending ?? 0,
+          contacted: res.data.inquiries?.contacted ?? 0,
+          booked: res.data.inquiries?.booked ?? 0,
+        });
+
+        // Normalize recent inquiries to UI shape
+        setRecentPendingInquiries(
+          res.data.recentPendingInquiries.map((inq) => ({
+            id: inq._id,
+            propertyId: "", // not provided by API
+            clientId: "", // not provided by API
+            clientName: inq.user?.username ?? "Unknown client",
+            clientPhone: inq.user?.phoneNumber ?? "N/A",
+            propertyTitle: inq.property?.title ?? "Unknown property",
+            propertyPrice: 0,
+            message: inq.message ?? "",
+            status: (inq.status as Inquiry["status"]) ?? "pending",
+            createdAt: inq.createdAt,
+          })),
+        );
+      } catch (err) {
+        console.error("Failed to load dashboard", err);
+      } finally {
+        setLoading(false);
+      }
     }
-  };
+
+    loadDashboard();
+  }, []);
 
   const handleAddProperty = () => {
-    router.push('/property/upload');
+    router.push("/property/upload");
   };
 
-  const handlePropertyPress = (property: AgentProperty) => {
-    // Navigate to property details or management
-    console.log('Property pressed:', property.id);
+  const handleViewAllProperties = () => {
+    router.push("/agent/manage-properties");
+  };
+
+  const handleViewAllInquiries = () => {
+    router.push("/agent/manage-inquiries");
+  };
+
+  const handleInquiryPress = (inquiry: Inquiry) => {
+    console.log("Inquiry pressed:", inquiry.id);
+    // Navigate to inquiry details screen
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   };
 
   const renderPropertyCard = ({ item }: { item: AgentProperty }) => (
-    <TouchableOpacity 
-      style={styles.propertyCard}
-      onPress={() => handlePropertyPress(item)}
+    <TouchableOpacity
+      style={styles.overviewPropertyCard}
+      onPress={() => handleViewAllProperties()}
     >
-      <Image source={{ uri: item.image }} style={styles.propertyImage} />
-      <View style={styles.propertyInfo}>
-        <ThemedText style={styles.propertyTitle} numberOfLines={1}>
+      <Image
+        source={{ uri: item.image }}
+        style={styles.overviewPropertyImage}
+      />
+      <View style={styles.overviewPropertyInfo}>
+        <ThemedText style={styles.overviewPropertyTitle} numberOfLines={1}>
           {item.title}
         </ThemedText>
-        <ThemedText style={styles.propertyLocation} numberOfLines={1}>
-          {item.location}
+        <ThemedText style={styles.propertyPrice}>
+          {item.price.toLocaleString()}TZS
         </ThemedText>
-        <View style={styles.propertyDetails}>
-          <ThemedText style={styles.propertyPrice}>
-            {item.price.toLocaleString()}TZS
-          </ThemedText>
-          <View style={[
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderInquiryCard = ({ item }: { item: Inquiry }) => (
+    <TouchableOpacity
+      style={styles.inquiryCard}
+      onPress={() => handleInquiryPress(item)}
+    >
+      <View style={styles.inquiryHeader}>
+        <ThemedText style={styles.inquiryClientName}>
+          {item.clientName}
+        </ThemedText>
+        <View
+          style={[
             styles.statusBadge,
-            { backgroundColor: getStatusColor(item.status) }
-          ]}>
-            <ThemedText style={styles.statusText}>
-              {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-            </ThemedText>
-          </View>
+            { backgroundColor: getStatusColor(item.status) },
+          ]}
+        >
+          <ThemedText style={styles.statusText}>
+            {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+          </ThemedText>
         </View>
-        <View style={styles.propertyStats}>
-          <View style={styles.statItem}>
-            <MaterialIcons name="visibility" size={16} color={Colors[colorScheme ?? 'light'].icon} />
-            <ThemedText style={styles.statText}>{item.views}</ThemedText>
-          </View>
-          <View style={styles.statItem}>
-            <MaterialIcons name="message" size={16} color={Colors[colorScheme ?? 'light'].icon} />
-            <ThemedText style={styles.statText}>{item.inquiries}</ThemedText>
-          </View>
-        </View>
+      </View>
+      <ThemedText style={styles.inquiryProperty} numberOfLines={1}>
+        {item.propertyTitle}
+      </ThemedText>
+      <ThemedText style={styles.inquiryMessage} numberOfLines={2}>
+        {item.message}
+      </ThemedText>
+      <View style={styles.inquiryFooter}>
+        <ThemedText style={styles.inquiryDate}>
+          {formatDate(item.createdAt)}
+        </ThemedText>
+        <ThemedText style={styles.inquiryPhone}>{item.clientPhone}</ThemedText>
       </View>
     </TouchableOpacity>
   );
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'available':
-        return '#4CAF50';
-      case 'booked':
-        return '#FF9800';
-      case 'sold':
-        return '#F44336';
+      case "pending":
+        return "#FF9800";
+      case "contacted":
+        return "#2196F3";
+      case "booked":
+        return "#4CAF50";
+      case "cancelled":
+        return "#F44336";
       default:
-        return Colors[colorScheme ?? 'light'].icon;
+        return Colors[colorScheme ?? "light"].icon;
     }
   };
 
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: Colors[colorScheme ?? 'light'].background,
+      backgroundColor: Colors[colorScheme ?? "light"].background,
     },
     header: {
-      padding: 20,
+      paddingHorizontal: 20,
       paddingTop: 60,
-      backgroundColor: colorScheme === 'dark' ? '#0a7ea4' : Colors[colorScheme ?? 'light'].tint,
+      paddingBottom: 20,
+      backgroundColor:
+        colorScheme === "dark"
+          ? "#0a7ea4"
+          : Colors[colorScheme ?? "light"].tint,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
     },
     headerTitle: {
-      fontSize: 24,
-      fontWeight: 'bold',
-      color: 'white',
+      fontSize: 28,
+      fontWeight: "bold",
+      color: "white",
       marginBottom: 5,
     },
     headerSubtitle: {
-      fontSize: 16,
-      color: 'rgba(255, 255, 255, 0.9)',
+      fontSize: 14,
+      color: "rgba(255, 255, 255, 0.9)",
     },
     addButton: {
-      position: 'absolute',
-      right: 20,
-      top: 60,
-      backgroundColor: 'rgba(255, 255, 255, 0.2)',
+      backgroundColor: "rgba(255, 255, 255, 0.2)",
       borderRadius: 25,
       width: 50,
       height: 50,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
     },
     content: {
       flex: 1,
       padding: 20,
     },
-    statsContainer: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      marginBottom: 20,
+    section: {
+      marginBottom: 30,
     },
-    statCard: {
-      flex: 1,
-      backgroundColor: Colors[colorScheme ?? 'light'].card,
-      padding: 15,
-      borderRadius: 12,
-      marginHorizontal: 5,
-      alignItems: 'center',
-    },
-    statNumber: {
-      fontSize: 20,
-      fontWeight: 'bold',
-      color: Colors[colorScheme ?? 'light'].text,
-    },
-    statLabel: {
-      fontSize: 12,
-      color: Colors[colorScheme ?? 'light'].secondaryText,
-      marginTop: 5,
-    },
-    tabContainer: {
-      flexDirection: 'row',
-      marginBottom: 20,
-      backgroundColor: Colors[colorScheme ?? 'light'].card,
-      borderRadius: 12,
-      padding: 4,
-    },
-    tab: {
-      flex: 1,
-      paddingVertical: 12,
-      alignItems: 'center',
-      borderRadius: 8,
-    },
-    activeTab: {
-      backgroundColor: Colors[colorScheme ?? 'light'].tint,
-    },
-    tabText: {
-      fontSize: 14,
-      fontWeight: '500',
-      color: Colors[colorScheme ?? 'light'].text,
-    },
-    activeTabText: {
-      color: 'white',
-    },
-    propertyCard: {
-      backgroundColor: Colors[colorScheme ?? 'light'].card,
-      borderRadius: 12,
+    sectionHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
       marginBottom: 15,
-      overflow: 'hidden',
-      flexDirection: 'row',
     },
-    propertyImage: {
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: "600",
+      color: Colors[colorScheme ?? "light"].text,
+    },
+    seeAllText: {
+      fontSize: 14,
+      color: Colors[colorScheme ?? "light"].tint,
+      fontWeight: "500",
+    },
+    overviewStatsContainer: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      gap: 10,
+    },
+    overviewStatCard: {
+      flex: 1,
+      backgroundColor: Colors[colorScheme ?? "light"].card,
+      padding: 12,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    overviewStatNumber: {
+      fontSize: 20,
+      fontWeight: "bold",
+      color: Colors[colorScheme ?? "light"].tint,
+      marginBottom: 4,
+    },
+    overviewStatLabel: {
+      fontSize: 12,
+      color: Colors[colorScheme ?? "light"].secondaryText,
+    },
+    overviewPropertyCard: {
+      backgroundColor: Colors[colorScheme ?? "light"].card,
+      borderRadius: 12,
+      marginBottom: 12,
+      overflow: "hidden",
+      flexDirection: "row",
+      height: 100,
+    },
+    overviewPropertyImage: {
       width: 100,
       height: 100,
     },
-    propertyInfo: {
+    overviewPropertyInfo: {
       flex: 1,
-      padding: 15,
+      padding: 12,
+      justifyContent: "space-between",
     },
-    propertyTitle: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: Colors[colorScheme ?? 'light'].text,
-      marginBottom: 4,
-    },
-    propertyLocation: {
+    overviewPropertyTitle: {
       fontSize: 14,
-      color: Colors[colorScheme ?? 'light'].secondaryText,
-      marginBottom: 8,
-    },
-    propertyDetails: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 8,
+      fontWeight: "600",
+      color: Colors[colorScheme ?? "light"].text,
     },
     propertyPrice: {
+      fontSize: 14,
+      fontWeight: "bold",
+      color: Colors[colorScheme ?? "light"].tint,
+    },
+    inquiryCard: {
+      backgroundColor: Colors[colorScheme ?? "light"].card,
+      borderRadius: 12,
+      marginBottom: 12,
+      padding: 15,
+      borderLeftWidth: 4,
+      borderLeftColor: "#FF9800",
+    },
+    inquiryHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 8,
+    },
+    inquiryClientName: {
       fontSize: 16,
-      fontWeight: 'bold',
-      color: Colors[colorScheme ?? 'light'].tint,
+      fontWeight: "600",
+      color: Colors[colorScheme ?? "light"].text,
+      flex: 1,
+    },
+    inquiryProperty: {
+      fontSize: 14,
+      color: Colors[colorScheme ?? "light"].secondaryText,
+      marginBottom: 8,
+    },
+    inquiryMessage: {
+      fontSize: 13,
+      color: Colors[colorScheme ?? "light"].text,
+      marginBottom: 10,
+      lineHeight: 18,
+    },
+    inquiryFooter: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    inquiryDate: {
+      fontSize: 12,
+      color: Colors[colorScheme ?? "light"].secondaryText,
+    },
+    inquiryPhone: {
+      fontSize: 12,
+      color: Colors[colorScheme ?? "light"].tint,
+      fontWeight: "500",
     },
     statusBadge: {
-      paddingHorizontal: 8,
+      paddingHorizontal: 10,
       paddingVertical: 4,
       borderRadius: 12,
     },
     statusText: {
       fontSize: 12,
-      fontWeight: '500',
-      color: 'white',
+      fontWeight: "500",
+      color: "white",
     },
-    propertyStats: {
-      flexDirection: 'row',
-      gap: 15,
+    emptyState: {
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 40,
     },
-    statItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-    },
-    statText: {
-      fontSize: 12,
-      color: Colors[colorScheme ?? 'light'].secondaryText,
+    emptyStateText: {
+      fontSize: 14,
+      color: Colors[colorScheme ?? "light"].secondaryText,
+      marginTop: 10,
     },
   });
 
   return (
     <ThemedView style={styles.container}>
       <View style={styles.header}>
-        <ThemedText style={styles.headerTitle}>Property Management</ThemedText>
-        <ThemedText style={styles.headerSubtitle}>Manage your property listings</ThemedText>
+        <View>
+          <ThemedText style={styles.headerTitle}>Dashboard</ThemedText>
+          <ThemedText style={styles.headerSubtitle}>
+            Welcome back, Agent
+          </ThemedText>
+        </View>
         <TouchableOpacity style={styles.addButton} onPress={handleAddProperty}>
           <MaterialIcons name="add" size={24} color="white" />
         </TouchableOpacity>
       </View>
 
-      <View style={styles.content}>
-        {/* Stats Overview */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <ThemedText style={styles.statNumber}>{stats.total}</ThemedText>
-            <ThemedText style={styles.statLabel}>Total</ThemedText>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 30 }}
+      >
+        {/* Properties Overview */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <ThemedText style={styles.sectionTitle}>Properties</ThemedText>
+            <TouchableOpacity onPress={handleViewAllProperties}>
+              <ThemedText style={styles.seeAllText}>See All</ThemedText>
+            </TouchableOpacity>
           </View>
-          <View style={styles.statCard}>
-            <ThemedText style={styles.statNumber}>{stats.available}</ThemedText>
-            <ThemedText style={styles.statLabel}>Available</ThemedText>
-          </View>
-          <View style={styles.statCard}>
-            <ThemedText style={styles.statNumber}>{stats.booked}</ThemedText>
-            <ThemedText style={styles.statLabel}>Booked</ThemedText>
-          </View>
-          <View style={styles.statCard}>
-            <ThemedText style={styles.statNumber}>{stats.sold}</ThemedText>
-            <ThemedText style={styles.statLabel}>Sold</ThemedText>
+
+          <View style={styles.overviewStatsContainer}>
+            <View style={styles.overviewStatCard}>
+              <ThemedText style={styles.overviewStatNumber}>
+                {propertyStats.total}
+              </ThemedText>
+              <ThemedText style={styles.overviewStatLabel}>Total</ThemedText>
+            </View>
+            <View style={styles.overviewStatCard}>
+              <ThemedText style={styles.overviewStatNumber}>
+                {propertyStats.available}
+              </ThemedText>
+              <ThemedText style={styles.overviewStatLabel}>
+                Available
+              </ThemedText>
+            </View>
+            <View style={styles.overviewStatCard}>
+              <ThemedText style={styles.overviewStatNumber}>
+                {propertyStats.booked}
+              </ThemedText>
+              <ThemedText style={styles.overviewStatLabel}>Booked</ThemedText>
+            </View>
+            <View style={styles.overviewStatCard}>
+              <ThemedText style={styles.overviewStatNumber}>
+                {propertyStats.sold}
+              </ThemedText>
+              <ThemedText style={styles.overviewStatLabel}>Sold</ThemedText>
+            </View>
           </View>
         </View>
 
-        {/* Filter Tabs */}
-        <View style={styles.tabContainer}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'all' && styles.activeTab]}
-            onPress={() => setActiveTab('all')}
-          >
-            <ThemedText style={[styles.tabText, activeTab === 'all' && styles.activeTabText]}>
-              All
-            </ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'available' && styles.activeTab]}
-            onPress={() => setActiveTab('available')}
-          >
-            <ThemedText style={[styles.tabText, activeTab === 'available' && styles.activeTabText]}>
-              Available
-            </ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'booked' && styles.activeTab]}
-            onPress={() => setActiveTab('booked')}
-          >
-            <ThemedText style={[styles.tabText, activeTab === 'booked' && styles.activeTabText]}>
-              Booked
-            </ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'sold' && styles.activeTab]}
-            onPress={() => setActiveTab('sold')}
-          >
-            <ThemedText style={[styles.tabText, activeTab === 'sold' && styles.activeTabText]}>
-              Sold
-            </ThemedText>
-          </TouchableOpacity>
+        {/* Inquiries Overview */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <ThemedText style={styles.sectionTitle}>Inquiries</ThemedText>
+            <TouchableOpacity onPress={handleViewAllInquiries}>
+              <ThemedText style={styles.seeAllText}>See All</ThemedText>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.overviewStatsContainer}>
+            <View style={styles.overviewStatCard}>
+              <ThemedText style={styles.overviewStatNumber}>
+                {inquiryStats.total}
+              </ThemedText>
+              <ThemedText style={styles.overviewStatLabel}>Total</ThemedText>
+            </View>
+            <View style={styles.overviewStatCard}>
+              <ThemedText style={styles.overviewStatNumber}>
+                {inquiryStats.pending}
+              </ThemedText>
+              <ThemedText
+                style={[styles.overviewStatLabel, { color: "#FF9800" }]}
+              >
+                Pending
+              </ThemedText>
+            </View>
+            <View style={styles.overviewStatCard}>
+              <ThemedText style={styles.overviewStatNumber}>
+                {inquiryStats.contacted}
+              </ThemedText>
+              <ThemedText style={styles.overviewStatLabel}>
+                Contacted
+              </ThemedText>
+            </View>
+            <View style={styles.overviewStatCard}>
+              <ThemedText style={styles.overviewStatNumber}>
+                {inquiryStats.booked}
+              </ThemedText>
+              <ThemedText style={styles.overviewStatLabel}>Booked</ThemedText>
+            </View>
+          </View>
         </View>
 
-        {/* Properties List */}
-        <FlatList
-          data={getFilteredProperties()}
-          renderItem={renderPropertyCard}
-          keyExtractor={(item) => item.id}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 20 }}
-        />
-      </View>
+        {/* Recent Pending Inquiries */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <ThemedText style={styles.sectionTitle}>
+              Recent Pending Inquiries
+            </ThemedText>
+            {recentPendingInquiries.length > 0 && (
+              <TouchableOpacity onPress={handleViewAllInquiries}>
+                <ThemedText style={styles.seeAllText}>View All</ThemedText>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {recentPendingInquiries.length > 0 ? (
+            <FlatList
+              data={recentPendingInquiries}
+              renderItem={renderInquiryCard}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+              style={{ marginTop: 10 }}
+            />
+          ) : (
+            <View style={styles.emptyState}>
+              <MaterialIcons
+                name="inbox"
+                size={48}
+                color={Colors[colorScheme ?? "light"].secondaryText}
+              />
+              <ThemedText style={styles.emptyStateText}>
+                No pending inquiries
+              </ThemedText>
+            </View>
+          )}
+        </View>
+      </ScrollView>
     </ThemedView>
   );
 }

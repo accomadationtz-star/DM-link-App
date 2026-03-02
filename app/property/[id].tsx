@@ -152,7 +152,7 @@ export default function PropertyDetail() {
   }
 
   const pauseAllOtherVideos = async (
-    exceptVideoIndex: number
+    exceptVideoIndex: number,
   ): Promise<void> => {
     try {
       for (const [index, videoRef] of Object.entries(videoRefsMap.current)) {
@@ -284,7 +284,7 @@ export default function PropertyDetail() {
             text: "Go to Login",
             onPress: () => router.push("/(auth)/login"),
           },
-        ]
+        ],
       );
       return;
     }
@@ -309,7 +309,7 @@ export default function PropertyDetail() {
               text: "OK",
               onPress: () => router.back(),
             },
-          ]
+          ],
         );
       } else {
         // Handle server response with success: false
@@ -372,7 +372,7 @@ export default function PropertyDetail() {
                 (err: any) =>
                   err.message ||
                   err.msg ||
-                  (typeof err === "string" ? err : "Validation error")
+                  (typeof err === "string" ? err : "Validation error"),
               )
               .join("\n");
           }

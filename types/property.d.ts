@@ -11,6 +11,13 @@ export type PropertyLocation = {
   street: string;
 };
 
+export type OwnerInfo = {
+  _id: string;
+  email: string;
+  phoneNumber: string;
+  username?: string;
+};
+
 export type Property = {
   _id: string;
   title: string;
@@ -28,4 +35,10 @@ export type Property = {
   media: MediaItem[];
   status: string;
   createdAt: string;
+  updatedAt?: string;
+  ownerId?: OwnerInfo;
+  ownerUsername?: string;
+  views?: number;
+  inquiries?: any[];
+  bookings?: any[];
 };

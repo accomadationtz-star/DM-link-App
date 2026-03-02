@@ -11,7 +11,7 @@ const envUrl = process.env.EXPO_PUBLIC_API_URL as string | undefined;
 const baseURL: string =
   envUrl ??
   (Platform.OS === "android"
-    ? "http://192.168.1.142:5000"
+    ? "http://192.168.1.117:5000"
     : "http://localhost:5000");
 
 const apiClient: AxiosInstance = axios.create({
@@ -53,7 +53,7 @@ apiClient.interceptors.request.use(
     }
 
     // Add auth token (skip for refresh endpoint)
-    if (!config.url?.includes('/refresh-token')) {
+    if (!config.url?.includes("/refresh-token")) {
       try {
         const token = await SecureStore.getItemAsync("token");
         if (token && config.headers) {
@@ -67,7 +67,7 @@ apiClient.interceptors.request.use(
 
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     return config;
-  }
+  },
 );
 
 // Response interceptor
@@ -77,7 +77,7 @@ apiClient.interceptors.response.use(
     console.log(
       "✅ API Response:",
       response.config.method?.toUpperCase(),
-      response.config.url
+      response.config.url,
     );
     console.log("Status:", response.status, response.statusText);
     console.log("Success:", response.data?.success ?? "N/A");
@@ -89,18 +89,18 @@ apiClient.interceptors.response.use(
     console.error(
       "❌ API Error:",
       error.config?.method?.toUpperCase(),
-      error.config?.url
+      error.config?.url,
     );
 
     if (error.response) {
       console.error(
         "Status:",
         error.response.status,
-        error.response.statusText
+        error.response.statusText,
       );
       console.error(
         "Response Data:",
-        JSON.stringify(error.response.data, null, 2)
+        JSON.stringify(error.response.data, null, 2),
       );
     } else if (error.request) {
       console.error("No response received from server");
@@ -122,7 +122,7 @@ apiClient.interceptors.response.use(
     // Handle 401 Unauthorized
     if (status === 401 && originalRequest && !originalRequest._retry) {
       // Check if this is a refresh token endpoint error
-      if (originalRequest.url?.includes('/refresh-token')) {
+      if (originalRequest.url?.includes("/refresh-token")) {
         console.log("❌ Refresh token failed, clearing session");
         await clearAuthData();
         processQueue(error, null);
@@ -161,7 +161,7 @@ apiClient.interceptors.response.use(
 
             console.log("🔄 Calling refresh endpoint...");
             const refreshed = await refreshTokens(rToken);
-            
+
             if (!refreshed.success) {
               throw new Error(refreshed.message || "Refresh failed");
             }
@@ -174,20 +174,20 @@ apiClient.interceptors.response.use(
             await SecureStore.setItemAsync("refreshToken", newRefresh);
 
             console.log("✅ Tokens refreshed successfully");
-            
+
             // Process queued requests
             processQueue(null, newAccess);
-            
+
             return newAccess;
           } catch (refreshError: any) {
             console.error("❌ Token refresh failed:", refreshError);
-            
+
             // Clear auth data on refresh failure
             await clearAuthData();
-            
+
             // Reject queued requests
             processQueue(refreshError, null);
-            
+
             return null;
           } finally {
             refreshPromise = null;
@@ -197,7 +197,7 @@ apiClient.interceptors.response.use(
       }
 
       const newAccessToken = await refreshPromise;
-      
+
       if (newAccessToken && originalRequest.headers) {
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
         console.log("🔄 Retrying original request with new token...");
@@ -206,7 +206,7 @@ apiClient.interceptors.response.use(
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 // Helper function to clear auth data

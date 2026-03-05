@@ -17,18 +17,12 @@ import { ThemedText } from "@/components/themed-text";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Colors } from "@/constants/theme";
 import {
-  getAllProperties,
+  getAgentProperties,
   updatePropertyStatus,
 } from "@/services/api/property";
 import { Property } from "@/types/property";
 
-type PropertyStatus =
-  | "available"
-  | "under_offer"
-  | "booked"
-  | "sold"
-  | "unavailable"
-  | string;
+type PropertyStatus = "available" | "sold" | "rented" | string;
 
 type FilterKey = "all" | PropertyStatus;
 
@@ -41,29 +35,15 @@ type StatusMeta = {
 
 const statusOrder: Record<string, StatusMeta> = {
   available: { label: "Available", color: "#16a34a", dot: "🟢", priority: 0 },
-  under_offer: {
-    label: "Under Offer",
-    color: "#f59e0b",
-    dot: "🟡",
-    priority: 1,
-  },
-  booked: { label: "Booked / Sold", color: "#ef4444", dot: "🔴", priority: 2 },
-  sold: { label: "Booked / Sold", color: "#ef4444", dot: "🔴", priority: 2 },
-  unavailable: {
-    label: "Unavailable",
-    color: "#94a3b8",
-    dot: "⚪",
-    priority: 3,
-  },
+  rented: { label: "Rented", color: "#8b5cf6", dot: "🟣", priority: 1 },
+  sold: { label: "Sold", color: "#ef4444", dot: "🔴", priority: 2 },
 };
 
 const filters: { key: FilterKey; label: string }[] = [
   { key: "all", label: "All" },
   { key: "available", label: "Available" },
-  { key: "under_offer", label: "Under Offer" },
-  { key: "booked", label: "Booked/Sold" },
+  { key: "rented", label: "Rented" },
   { key: "sold", label: "Sold" },
-  { key: "unavailable", label: "Unavailable" },
 ];
 
 export default function ManagePropertiesScreen() {
@@ -84,7 +64,7 @@ export default function ManagePropertiesScreen() {
     setError(null);
 
     try {
-      const res = await getAllProperties(1, 50);
+      const res = await getAgentProperties(1, 50);
       setProperties(res.data || []);
     } catch (e: any) {
       setError(e?.message || "Failed to load properties");
@@ -107,10 +87,15 @@ export default function ManagePropertiesScreen() {
   };
 
   const filteredAndSorted = useMemo(() => {
+    const normalizedFilter = (filter || "").toString().toLowerCase();
     const list =
-      filter === "all"
-        ? properties
-        : properties.filter((p) => p.status === filter);
+      normalizedFilter === "all"
+        ? [...properties]
+        : properties.filter(
+            (property) =>
+              (property.status || "").toString().toLowerCase() ===
+              normalizedFilter,
+          );
 
     return [...list].sort((a, b) => {
       const aMeta = metaForStatus(a.status);
@@ -125,17 +110,21 @@ export default function ManagePropertiesScreen() {
     });
   }, [properties, filter]);
 
-  const allowedTransitions = (status: PropertyStatus): PropertyStatus[] => {
+  const allowedTransitions = (
+    status: PropertyStatus,
+    purpose: string,
+  ): PropertyStatus[] => {
+    const isSale = purpose === "sell";
+
     switch (status) {
       case "available":
-        return ["under_offer", "booked", "sold", "unavailable"];
-      case "under_offer":
-        return ["booked", "sold", "unavailable"];
-      case "booked":
+        return isSale ? ["sold"] : ["rented"];
       case "sold":
-        return ["unavailable"];
+        return ["available"];
+      case "rented":
+        return ["available"];
       default:
-        return ["available", "unavailable"];
+        return ["available"];
     }
   };
 
@@ -192,7 +181,7 @@ export default function ManagePropertiesScreen() {
     return (
       <TouchableOpacity
         activeOpacity={0.9}
-        onPress={() => router.push(`/agent/property-details?id=${item._id}`)}
+        onPress={() => router.push(`/property/details?id=${item._id}`)}
         style={[
           styles.card,
           { borderColor: cardBorder, backgroundColor: cardBg },
@@ -226,9 +215,9 @@ export default function ManagePropertiesScreen() {
           <View style={styles.chipsRow}>
             <Chip>{(item.type || "-").toUpperCase()}</Chip>
             <Chip>{(item.purpose || "").toUpperCase() || ""}</Chip>
-            {item.bedrooms !== undefined && item.bedrooms !== null ? (
+            {item.bedrooms !== undefined && item.bedrooms !== null && item.bedrooms > 0 ? (
               <Chip>
-                {item.bedrooms === 0 ? "Studio" : `${item.bedrooms} BR`}
+                {`${item.bedrooms} BR`}
               </Chip>
             ) : null}
           </View>
@@ -253,7 +242,7 @@ export default function ManagePropertiesScreen() {
                 styles.actionBtn,
                 { backgroundColor: Colors[colorScheme ?? "light"].tint },
               ]}
-              onPress={() => router.push(`/property/manage?id=${item._id}`)}
+              onPress={() => router.push(`/property/details?id=${item._id}&edit=true`)}
             >
               <MaterialIcons name="edit" size={18} color="#fff" />
               <ThemedText style={styles.actionText}>Edit property</ThemedText>
@@ -269,7 +258,7 @@ export default function ManagePropertiesScreen() {
               ]}
               disabled={updatingId === item._id}
               onPress={() => {
-                const options = allowedTransitions(item.status);
+                const options = allowedTransitions(item.status, item.purpose);
                 if (!options.length) return;
 
                 Alert.alert(

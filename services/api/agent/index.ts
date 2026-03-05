@@ -6,8 +6,7 @@ export interface AgentDashboardResponse {
     properties: {
       total: number;
       available: number;
-      booked: number;
-      rented?: number;
+      rented: number;
       sold: number;
     };
     inquiries: {

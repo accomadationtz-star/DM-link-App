@@ -33,12 +33,13 @@ export type Property = {
     public_id: string;
   };
   media: MediaItem[];
-  status: string;
+  status: "available" | "sold" | "rented" | string;
   createdAt: string;
   updatedAt?: string;
   ownerId?: OwnerInfo;
   ownerUsername?: string;
   views?: number;
+  inquiryCount?: number;
   inquiries?: any[];
   bookings?: any[];
 };

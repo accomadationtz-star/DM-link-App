@@ -5,7 +5,7 @@ import axios, {
 } from "axios";
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
-import { refreshTokens } from "@/services/api/auth";
+import { useAuthStore } from "@/store/auth";
 
 const envUrl = process.env.EXPO_PUBLIC_API_URL as string | undefined;
 const baseURL: string =
@@ -55,10 +55,26 @@ apiClient.interceptors.request.use(
     // Add auth token (skip for refresh endpoint)
     if (!config.url?.includes("/refresh-token")) {
       try {
-        const token = await SecureStore.getItemAsync("token");
+        const authStore = useAuthStore.getState();
+        let token: string | null = null;
+
+        // For phone completion endpoint, use pending token if available
+        if (
+          config.url?.includes("/complete-phone") &&
+          authStore.pendingGoogleAuth?.pendingToken
+        ) {
+          token = authStore.pendingGoogleAuth.pendingToken;
+          console.log("🔑 Pending token added for phone completion");
+        } else {
+          // Otherwise use normal auth token
+          token = await SecureStore.getItemAsync("token");
+        }
+
         if (token && config.headers) {
           config.headers.Authorization = `Bearer ${token}`;
-          console.log("🔑 Auth token added");
+          if (!config.url?.includes("/complete-phone")) {
+            console.log("🔑 Auth token added");
+          }
         }
       } catch (error) {
         console.log("⚠️  Could not read auth token");
@@ -85,39 +101,47 @@ apiClient.interceptors.response.use(
     return response;
   },
   async (error: AxiosError) => {
-    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.error(
-      "❌ API Error:",
-      error.config?.method?.toUpperCase(),
-      error.config?.url,
-    );
-
-    if (error.response) {
-      console.error(
-        "Status:",
-        error.response.status,
-        error.response.statusText,
-      );
-      console.error(
-        "Response Data:",
-        JSON.stringify(error.response.data, null, 2),
-      );
-    } else if (error.request) {
-      console.error("No response received from server");
-      console.error("Request details:", {
-        url: error.config?.url,
-        method: error.config?.method,
-        timeout: error.config?.timeout,
-      });
-    } else {
-      console.error("Request setup error:", error.message);
-    }
-    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-
     const originalRequest = error.config as
       | (InternalAxiosRequestConfig & { _retry?: boolean })
       | undefined;
     const status = error.response?.status;
+
+    // Only log errors that won't be recovered (not recoverable 401s)
+    const isRecoverable401 = status === 401 && originalRequest && !originalRequest._retry && !originalRequest.url?.includes("/refresh-token") && !originalRequest.url?.includes("/complete-phone");
+    
+    if (!isRecoverable401) {
+      console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      console.error(
+        "❌ API Error:",
+        error.config?.method?.toUpperCase(),
+        error.config?.url,
+      );
+
+      if (error.response) {
+        console.error(
+          "Status:",
+          error.response.status,
+          error.response.statusText,
+        );
+        console.error(
+          "Response Data:",
+          JSON.stringify(error.response.data, null, 2),
+        );
+      } else if (error.request) {
+        console.error("No response received from server");
+        console.error("Request details:", {
+          url: error.config?.url,
+          method: error.config?.method,
+          timeout: error.config?.timeout,
+        });
+      } else {
+        console.error("Request setup error:", error.message);
+      }
+      console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    } else {
+      // Log recoverable 401 as debug only (not error)
+      console.log("🔄 Token expired, initiating refresh...");
+    }
 
     // Handle 401 Unauthorized
     if (status === 401 && originalRequest && !originalRequest._retry) {
@@ -126,6 +150,13 @@ apiClient.interceptors.response.use(
         console.log("❌ Refresh token failed, clearing session");
         await clearAuthData();
         processQueue(error, null);
+        return Promise.reject(error);
+      }
+
+      // Don't retry phone completion endpoint on 401 (just reject to show error to user)
+      if (originalRequest.url?.includes("/complete-phone")) {
+        console.log("❌ Phone completion failed, pending token invalid");
+        await clearAuthData();
         return Promise.reject(error);
       }
 
@@ -160,7 +191,22 @@ apiClient.interceptors.response.use(
             }
 
             console.log("🔄 Calling refresh endpoint...");
-            const refreshed = await refreshTokens(rToken);
+            
+            // Call refresh endpoint directly to avoid circular dependency
+            const response = await axios.post<{
+              success: boolean;
+              message?: string;
+              data: {
+                accessToken: string;
+                refreshToken?: string;
+              };
+            }>(
+              `${baseURL}/api/users/refresh-token`,
+              { refreshToken: rToken },
+              { timeout: 10000 }
+            );
+            
+            const refreshed = response.data;
 
             if (!refreshed.success) {
               throw new Error(refreshed.message || "Refresh failed");
@@ -168,6 +214,14 @@ apiClient.interceptors.response.use(
 
             const newAccess = refreshed.data.accessToken;
             const newRefresh = refreshed.data.refreshToken ?? rToken;
+
+            // Validate tokens are strings before storing
+            if (typeof newAccess !== "string") {
+              throw new Error("Invalid access token format from refresh");
+            }
+            if (typeof newRefresh !== "string") {
+              throw new Error("Invalid refresh token format from refresh");
+            }
 
             // Update stored tokens
             await SecureStore.setItemAsync("token", newAccess);

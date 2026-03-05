@@ -25,7 +25,7 @@ export default function AgentScreen() {
   const [propertyStats, setPropertyStats] = useState({
     total: 0,
     available: 0,
-    booked: 0,
+    rented: 0,
     sold: 0,
   });
 
@@ -50,7 +50,7 @@ export default function AgentScreen() {
         setPropertyStats({
           total: res.data.properties?.total ?? 0,
           available: res.data.properties?.available ?? 0,
-          booked: res.data.properties?.booked ?? 0,
+          rented: res.data.properties?.rented ?? 0,
           sold: res.data.properties?.sold ?? 0,
         });
 
@@ -403,9 +403,9 @@ export default function AgentScreen() {
             </View>
             <View style={styles.overviewStatCard}>
               <ThemedText style={styles.overviewStatNumber}>
-                {propertyStats.booked}
+                {propertyStats.rented}
               </ThemedText>
-              <ThemedText style={styles.overviewStatLabel}>Booked</ThemedText>
+              <ThemedText style={styles.overviewStatLabel}>Rented</ThemedText>
             </View>
             <View style={styles.overviewStatCard}>
               <ThemedText style={styles.overviewStatNumber}>

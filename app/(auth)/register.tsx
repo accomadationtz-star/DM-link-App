@@ -15,6 +15,12 @@ import { ThemedView } from "@/components/themed-view";
 import { registerUser } from "@/services/api/auth";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Colors } from "@/constants/theme";
+import {
+  validateEmail,
+  validatePhoneNumber,
+  validateUsername,
+  validatePassword,
+} from "@/utils/validators";
 
 type FormState = {
   username: string;
@@ -47,11 +53,11 @@ export default function RegisterScreen() {
 
   const canSubmit = useMemo(() => {
     return (
-      form.username.trim().length > 0 &&
+      validateUsername(form.username) &&
       validateEmail(form.email) &&
-      validatePhone(form.phoneNumber) &&
-      form.password.length >= 8 &&
-      form.confirmPassword.length >= 8 &&
+      validatePhoneNumber(form.phoneNumber) &&
+      validatePassword(form.password) &&
+      validatePassword(form.confirmPassword) &&
       form.password === form.confirmPassword
     );
   }, [form]);
@@ -65,26 +71,16 @@ export default function RegisterScreen() {
     }
   }
 
-  function validateEmail(email: string): boolean {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  }
-
-  function validatePhone(phone: string): boolean {
-    const digits = phone.replace(/\D/g, "");
-    return digits.length >= 9 && digits.length <= 15;
-  }
-
   function validate(): boolean {
     const nextErrors: FormErrors = {};
-    if (!form.username.trim()) nextErrors.username = "Username is required";
-    else if (form.username.trim().length < 3)
+    if (!validateUsername(form.username))
       nextErrors.username = "Minimum 3 characters";
     if (!validateEmail(form.email)) nextErrors.email = "Enter a valid email";
-    if (!validatePhone(form.phoneNumber))
-      nextErrors.phoneNumber = "Enter a valid phone number";
-    if (form.password.length < 8) nextErrors.password = "Minimum 8 characters";
-    if (form.confirmPassword.length < 8)
+    if (!validatePhoneNumber(form.phoneNumber))
+      nextErrors.phoneNumber = "Must be 10 digits starting with 07 or 06";
+    if (!validatePassword(form.password))
+      nextErrors.password = "Minimum 8 characters";
+    if (!validatePassword(form.confirmPassword))
       nextErrors.confirmPassword = "Minimum 8 characters";
     if (
       form.password &&
@@ -101,9 +97,7 @@ export default function RegisterScreen() {
     let message: string | undefined;
     switch (key) {
       case "username": {
-        const v = value.trim();
-        if (!v) message = "Username is required";
-        else if (v.length < 3) message = "Minimum 3 characters";
+        if (!validateUsername(value)) message = "Minimum 3 characters";
         break;
       }
       case "email": {
@@ -111,11 +105,12 @@ export default function RegisterScreen() {
         break;
       }
       case "phoneNumber": {
-        if (!validatePhone(value)) message = "Enter a valid phone number";
+        if (!validatePhoneNumber(value))
+          message = "Must be 10 digits starting with 07 or 06";
         break;
       }
       case "password": {
-        if (value.length < 8) message = "Minimum 8 characters";
+        if (!validatePassword(value)) message = "Minimum 8 characters";
         // also keep confirm password in sync if it was filled
         if (form.confirmPassword) {
           if (value !== form.confirmPassword) {
@@ -130,7 +125,7 @@ export default function RegisterScreen() {
         break;
       }
       case "confirmPassword": {
-        if (value.length < 8) message = "Minimum 8 characters";
+        if (!validatePassword(value)) message = "Minimum 8 characters";
         else if (form.password !== value) message = "Passwords do not match";
         break;
       }

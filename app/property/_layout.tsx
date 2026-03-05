@@ -9,6 +9,7 @@ export default function PropertyLayout() {
       }}
     >
       <Stack.Screen name="[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="details" options={{ headerShown: false }} />
       <Stack.Screen name="upload" options={{ headerShown: false }} />
     </Stack>
   );

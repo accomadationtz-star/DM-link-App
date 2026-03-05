@@ -199,22 +199,25 @@ export interface PropertyListResponse {
   total: number;
 }
 
-// Fetch all properties (admin/agent view)
-export async function getAllProperties(
+// Fetch current agent's properties only (for agent to manage their own)
+export async function getAgentProperties(
   page = 1,
   limit = 20,
 ): Promise<PropertyListResponse> {
   const res = await apiClient.get<PropertyListResponse>(
-    `/api/properties/all?page=${page}&limit=${limit}`,
+    `/api/agent/properties?page=${page}&limit=${limit}`,
   );
   return res.data;
 }
 
+// Fetch all available properties (for public home screen)
 export async function getProperties(
   page = 1,
   limit = 10,
 ): Promise<PropertyListResponse> {
-  const res = await apiClient.get<PropertyListResponse>(`/api/properties`);
+  const res = await apiClient.get<PropertyListResponse>(
+    `/api/properties?page=${page}&limit=${limit}`,
+  );
   return res.data;
 }
 
@@ -243,5 +246,24 @@ export async function updatePropertyStatus(id: string, status: string) {
     status,
   });
 
+  return res.data;
+}
+
+export async function updateProperty(
+  id: string,
+  payload: {
+    title?: string;
+    description?: string;
+    price?: number;
+    bedrooms?: number;
+    area?: number;
+  },
+) {
+  const res = await apiClient.patch(`/api/properties/${id}`, payload);
+  return res.data;
+}
+
+export async function deleteProperty(id: string) {
+  const res = await apiClient.delete(`/api/properties/${id}`);
   return res.data;
 }

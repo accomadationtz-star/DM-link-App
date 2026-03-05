@@ -7,7 +7,7 @@ export interface AgentProperty {
   bedrooms: number;
   bathrooms: number;
   area: number;
-  status: 'available' | 'booked' | 'sold';
+  status: 'available' | 'rented' | 'sold';
   image: string;
   dateAdded: string;
   views: number;
@@ -39,7 +39,7 @@ export const mockAgentProperties: AgentProperty[] = [
     bedrooms: 4,
     bathrooms: 3,
     area: 2500,
-    status: 'booked',
+    status: 'rented',
     image: 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=400',
     dateAdded: '2024-01-10',
     views: 189,
@@ -92,14 +92,14 @@ export const mockAgentProperties: AgentProperty[] = [
   },
 ];
 
-export const getPropertiesByStatus = (status: 'available' | 'booked' | 'sold') => {
+export const getPropertiesByStatus = (status: 'available' | 'rented' | 'sold') => {
   return mockAgentProperties.filter(property => property.status === status);
 };
 
 export const getTotalStats = () => {
   const total = mockAgentProperties.length;
   const available = getPropertiesByStatus('available').length;
-  const booked = getPropertiesByStatus('booked').length;
+  const rented = getPropertiesByStatus('rented').length;
   const sold = getPropertiesByStatus('sold').length;
   const totalViews = mockAgentProperties.reduce((sum, prop) => sum + prop.views, 0);
   const totalInquiries = mockAgentProperties.reduce((sum, prop) => sum + prop.inquiries, 0);
@@ -107,7 +107,7 @@ export const getTotalStats = () => {
   return {
     total,
     available,
-    booked,
+    rented,
     sold,
     totalViews,
     totalInquiries,

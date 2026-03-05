@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -7,16 +7,17 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
 import { useRouter } from "expo-router";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Colors } from "@/constants/theme";
-import { loginUser } from "@/services/api/auth";
+import { loginUser, googleSignIn } from "@/services/api/auth";
 import { useAuthStore } from "@/store/auth";
-import { useGoogleAuth } from "./googleAuth";
-import apiClient from "@/services/api/client";
+import { useGoogleSignIn } from "@/utils/googleAuth";
 
 type FormState = {
   username: string;
@@ -33,42 +34,58 @@ export default function LoginScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const colorScheme = useColorScheme();
   const setSession = useAuthStore((s) => s.setSession);
-  const [request, response, promptAsync] = useGoogleAuth();
+  const setPendingGoogleAuth = useAuthStore((s) => s.setPendingGoogleAuth);
+  const { signIn } = useGoogleSignIn();
 
-  useEffect(() => {
-    if (response?.type === "success") {
-      const { accessToken } = response.authentication;
-      googleLogin(accessToken);
-    }
-  }, [response]);
-
-  const googleLogin = async (accessToken: string) => {
+  const handleGoogleSignIn = async () => {
     try {
       setIsSubmitting(true);
-      const res = await apiClient.post("/auth/google", { accessToken });
+      const { idToken } = await signIn();
 
-      const { user, tokens } = res.data;
+      // Exchange Google idToken with backend
+      const res = await googleSignIn({ idToken });
 
-      await setSession({
-        user,
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-      });
-
-      // Check if user needs to complete registration
-      if (user.registrationStep === "PHONE_REQUIRED") {
-        // Navigate to phone verification or profile completion
-        alert("Please complete your profile");
-        router.replace("/(tabs)/profile");
-      } else {
-        router.replace("/(tabs)/profile");
+      if (!res.success) {
+        Alert.alert("Error", res.data?.message || "Google login failed");
+        return;
       }
-    } catch (e: any) {
-      const backendMsg =
-        e?.response?.data?.message ||
-        e?.response?.data?.error ||
-        "Google login failed. Please try again.";
-      alert(backendMsg);
+
+      // Check backend response status
+      if (res.status === "completed") {
+        // User already has phone number, full session issued
+        try {
+          await setSession({
+            user: res.data.user,
+            accessToken: res.data.accessToken,
+            refreshToken: res.data.refreshToken,
+          });
+          // Don't navigate - the root layout will detect user is set
+          // and automatically switch from (auth) to (tabs) routes
+        } catch (storageError: any) {
+          console.error("❌ Storage error:", storageError.message);
+          Alert.alert(
+            "Storage Error",
+            "Failed to save session. Please try signing in again.\n\nError: " +
+              storageError.message
+          );
+        }
+      } else if (res.status === "requiresPhone") {
+        // User needs to complete phone number
+        setPendingGoogleAuth({
+          googleUser: res.data.user,
+          pendingToken: res.data.pendingToken,
+        });
+        router.push("/(auth)/complete-phone");
+      } else {
+        Alert.alert("Error", "Unexpected response from server");
+      }
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Google login failed";
+      console.error("❌ Google sign-in error:", error);
+      Alert.alert("Error", message);
     } finally {
       setIsSubmitting(false);
     }
@@ -138,22 +155,33 @@ export default function LoginScreen() {
         password: form.password,
       });
       if (res.success) {
-        await setSession({
-          user: res.data.user,
-          accessToken: res.data.accessToken,
-          refreshToken: res.data.refreshToken,
-        });
-        router.replace("/(tabs)/profile");
+        try {
+          await setSession({
+            user: res.data.user,
+            accessToken: res.data.accessToken,
+            refreshToken: res.data.refreshToken,
+          });
+          // Don't navigate - the root layout will detect user is set
+          // and automatically switch from (auth) to (tabs) routes
+        } catch (storageError: any) {
+          console.error("❌ Storage error:", storageError.message);
+          Alert.alert(
+            "Storage Error",
+            "Failed to save session. Please try again.\n\nError: " +
+              storageError.message
+          );
+        }
       } else {
         // backend indicates failure
-        alert(res.message || "Login failed");
+        Alert.alert("Login failed", res.message || "Please check your credentials");
       }
     } catch (e: any) {
       const backendMsg =
         e?.response?.data?.message ||
         e?.response?.data?.error ||
         "Login failed. Please check your credentials.";
-      alert(backendMsg);
+      console.error("❌ Login error:", e);
+      Alert.alert("Error", backendMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -241,17 +269,23 @@ export default function LoginScreen() {
           </View>
 
           <TouchableOpacity
-            disabled={!request || isSubmitting}
+            disabled={isSubmitting}
             style={[
               styles.googleButton,
               colorScheme === "dark" && styles.googleButtonDark,
-              (!request || isSubmitting) && styles.buttonDisabled,
+              isSubmitting && styles.buttonDisabled,
             ]}
-            onPress={() => promptAsync()}
+            onPress={handleGoogleSignIn}
           >
-            <ThemedText style={styles.googleButtonText}>
-              Continue with Google
-            </ThemedText>
+            {isSubmitting ? (
+              <ActivityIndicator
+                color={colorScheme === "dark" ? "#fff" : "#000"}
+              />
+            ) : (
+              <ThemedText style={styles.googleButtonText}>
+                Continue with Google
+              </ThemedText>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity

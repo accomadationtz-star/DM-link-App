@@ -46,7 +46,7 @@ export default function LoginScreen() {
       const res = await googleSignIn({ idToken });
 
       if (!res.success) {
-        Alert.alert("Error", res.data?.message || "Google login failed");
+        Alert.alert("Error", "Google login failed");
         return;
       }
 

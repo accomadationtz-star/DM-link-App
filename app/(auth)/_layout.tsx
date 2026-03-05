@@ -9,8 +9,8 @@ export default function AuthLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        animationEnabled: true,
-        cardStyle: {
+        animation: 'default',
+        contentStyle: {
           backgroundColor: Colors[colorScheme ?? "light"].background,
         },
       }}
@@ -37,7 +37,7 @@ export default function AuthLayout() {
         options={{
           title: "Complete Profile",
           headerShown: false,
-          animationEnabled: false, // No animation when completing phone
+          animation: 'none', // No animation when completing phone
         }}
       />
     </Stack>

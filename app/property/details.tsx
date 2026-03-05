@@ -52,7 +52,7 @@ export default function PropertyDetailsScreen() {
 
   useEffect(() => {
     if (property && user) {
-      const ownerCheck = property.ownerId?._id === user.id || property.ownerId === user.id;
+      const ownerCheck = property.ownerId?._id === user.id;
       setIsOwner(ownerCheck);
     }
   }, [property, user]);
@@ -254,7 +254,7 @@ export default function PropertyDetailsScreen() {
               <FormField
                 label="Title *"
                 value={formData.title}
-                onChangeText={(text) =>
+                onChangeText={(text: string) =>
                   setFormData({ ...formData, title: text })
                 }
                 placeholder="Property title"
@@ -264,7 +264,7 @@ export default function PropertyDetailsScreen() {
               <FormField
                 label="Description *"
                 value={formData.description}
-                onChangeText={(text) =>
+                onChangeText={(text: string) =>
                   setFormData({ ...formData, description: text })
                 }
                 placeholder="Property description"
@@ -278,7 +278,7 @@ export default function PropertyDetailsScreen() {
                   <FormField
                     label="Price (TZS) *"
                     value={formData.price}
-                    onChangeText={(text) =>
+                    onChangeText={(text: string) =>
                       setFormData({ ...formData, price: text })
                     }
                     placeholder="0"
@@ -290,7 +290,7 @@ export default function PropertyDetailsScreen() {
                   <FormField
                     label="Bedrooms *"
                     value={formData.bedrooms}
-                    onChangeText={(text) =>
+                    onChangeText={(text: string) =>
                       setFormData({ ...formData, bedrooms: text })
                     }
                     placeholder="0"
@@ -303,7 +303,7 @@ export default function PropertyDetailsScreen() {
               <FormField
                 label="Area (m²) *"
                 value={formData.area}
-                onChangeText={(text) =>
+                onChangeText={(text: string) =>
                   setFormData({ ...formData, area: text })
                 }
                 placeholder="0"
@@ -573,7 +573,7 @@ const FormField = ({
 }: any) => {
   const inputBg = colorScheme === "dark" ? "#1f2937" : "#f3f4f6";
   const borderColor =
-    colorScheme === "dark" ? "#374151" : Colors[colorScheme ?? "light"].tint;
+    colorScheme === "dark" ? "#374151" : Colors[colorScheme as 'light' | 'dark' ?? "light"].tint;
 
   return (
     <View style={styles.fieldGroup}>
